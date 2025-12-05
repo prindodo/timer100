@@ -235,11 +235,8 @@
             
             if (totalSeconds <= 0) {
                 if (isRunning) timerEnd();
-            } else if (totalSeconds < 60) {
+            } else if (totalSeconds < 300) { // 5분 미만 (300초) 일 때 붉은색
                 color = '#ff4444'; 
-                body.classList.remove('alarm-active');
-            } else if (totalSeconds < 300) {
-                color = '#ffcc00'; 
                 body.classList.remove('alarm-active');
             } else {
                 body.classList.remove('alarm-active');
