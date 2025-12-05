@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>100분 타이머</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: #000;
+            color: #fff;
+            overflow: hidden; /* 스크롤 방지 */
+            touch-action: manipulation; /* 더블탭 줌 방지 */
+            user-select: none; /* 텍스트 선택 방지 */
+        }
+
+        /* 상단 고정 제목 */
+        .header-title {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            padding-top: 2rem;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #aaa;
+            z-index: 10;
+            letter-spacing: -0.02em;
+        }
+
+        @media (min-width: 768px) {
+            .header-title {
+                font-size: 2rem;
+            }
+        }
+
+        /* 타이머 텍스트 */
+        .timer-text {
+            font-size: 22vw;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+            transition: color 0.3s;
+            z-index: 1; /* 텍스트는 게이지보다 아래 */
+        }
+
+        /* 컨트롤 패널 */
+        .controls {
+            transition: opacity 0.5s ease;
+            z-index: 20; 
+        }
+        
+        .controls.dimmed {
+            opacity: 0.2;
+        }
+        .controls.dimmed:hover {
+            opacity: 1;
+        }
+
+        /* 버튼 스타일 */
+        .btn {
+            background: transparent;
+            border: 2px solid #333;
+            color: #888;
+            padding: 1rem 2rem;
+            font-size: 1.5rem;
+            border-radius: 9999px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            font-weight: bold;
+            min-width: 140px;
+        }
+
+        .btn:hover {
+            border-color: #fff;
+            color: #fff;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-primary {
+            border-color: #fff;
+            color: #fff;
+        }
+        
+        .btn-primary:hover {
+            background: #fff;
+            color: #000;
+        }
+
+        /* 입력창 스타일 */
+        .custom-input-container {
+            transition: opacity 0.3s;
+            opacity: 0.3; /* 평소에는 흐릿하게 */
+        }
+        .custom-input-container:hover, 
+        .custom-input-container:focus-within {
+            opacity: 1;
+        }
+        
+        .custom-input {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid #444;
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            outline: none;
+        }
+        .custom-input:focus {
+            border-color: #fff;
+        }
+        /* input number 화살표 제거 */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* 종료 알림 애니메이션 */
+        @keyframes flash {
+            0%, 100% { background-color: #000; color: #ff0000; }
+            50% { background-color: #300; color: #ff0000; }
+        }
+        
+        .alarm-active {
+            animation: flash 1s infinite;
+        }
+        .alarm-active .timer-text {
+            color: #ff0000;
+            text-shadow: 0 0 50px rgba(255, 0, 0, 0.8);
+        }
+
+        /* 게이지 컨테이너 스타일 */
+        .progress-container {
+            height: 50px; 
+            cursor: pointer;
+            z-index: 50; 
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.5); 
+        }
+        
+        .progress-container:hover .progress-bar {
+            filter: brightness(1.2); 
+        }
+        
+        .progress-bar {
+            height: 100%;
+            transition: width 1s linear, background-color 0.3s;
+        }
+
+        .progress-container:hover::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.05);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center relative">
+
+    <!-- 상단 제목 -->
+    <div class="header-title">
+        2026. 전라남도창의융합영재교육원 영재교육대상자 선발 전형
+    </div>
+
+    <!-- 메인 타이머 영역 -->
+    <div id="display" class="timer-text select-none">100:00</div>
+
+    <!-- 컨트롤 버튼 및 입력창 영역 -->
+    <!-- 버튼 위치를 조금 올려서 입력창 공간 확보 -->
+    <div id="controls" class="controls absolute bottom-24 flex flex-col items-center gap-4 z-30">
+        
+        <!-- 버튼 그룹 -->
+        <div class="flex flex-wrap justify-center gap-6 px-4">
+            <button id="startBtn" class="btn btn-primary" onclick="startTimer()">시작</button>
+            <button id="pauseBtn" class="btn" onclick="pauseTimer()">일시정지</button>
+            <button id="resetBtn" class="btn" onclick="resetTimer()">리셋</button>
+        </div>
+
+        <!-- 커스텀 시간 입력창 -->
+        <div class="custom-input-container flex items-center gap-2 mt-2">
+            <span class="text-gray-500 text-sm">시간 설정:</span>
+            <input type="number" id="customMinInput" class="custom-input p-1 w-16 text-sm" placeholder="100" min="1" onkeydown="if(event.key==='Enter') setCustomTime()">
+            <span class="text-gray-500 text-sm">분</span>
+            <button onclick="setCustomTime()" class="text-xs border border-gray-600 rounded px-2 py-1 text-gray-400 hover:text-white hover:border-white transition-colors">적용</button>
+        </div>
+
+    </div>
+
+    <!-- 진행바 (맨 하단, 높은 z-index) -->
+    <div id="progressContainer" class="absolute bottom-0 left-0 w-full bg-gray-800 progress-container group" title="클릭하여 시간 이동">
+        <div id="progress" class="progress-bar bg-white w-full origin-left"></div>
+    </div>
+
+    <script>
+        // 초기값은 100분으로 설정, 이후 입력에 따라 변경됨
+        let targetMinutes = 100;
+        let maxSeconds = targetMinutes * 60;
+        let totalSeconds = maxSeconds;
+        
+        let isRunning = false;
+        let interval = null;
+        
+        const display = document.getElementById('display');
+        const startBtn = document.getElementById('startBtn');
+        const controls = document.getElementById('controls');
+        const progressBar = document.getElementById('progress');
+        const progressContainer = document.getElementById('progressContainer');
+        const customInput = document.getElementById('customMinInput');
+        const body = document.body;
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${m.toString()}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function updateDisplay() {
+            if (totalSeconds < 0) totalSeconds = 0;
+
+            display.textContent = formatTime(totalSeconds);
+            
+            // 진행률 업데이트 (현재 설정된 maxSeconds 기준)
+            const percentage = maxSeconds > 0 ? (totalSeconds / maxSeconds) * 100 : 0;
+            progressBar.style.width = `${percentage}%`;
+
+            // 색상 관리
+            let color = '#fff'; 
+            
+            if (totalSeconds <= 0) {
+                if (isRunning) timerEnd();
+            } else if (totalSeconds < 60) {
+                color = '#ff4444'; 
+                body.classList.remove('alarm-active');
+            } else if (totalSeconds < 300) {
+                color = '#ffcc00'; 
+                body.classList.remove('alarm-active');
+            } else {
+                body.classList.remove('alarm-active');
+            }
+
+            display.style.color = color;
+            progressBar.style.backgroundColor = color;
+
+            if (totalSeconds > 0 && startBtn.textContent === "종료됨") {
+                startBtn.textContent = "시작";
+            }
+        }
+
+        function startTimer() {
+            if (isRunning) return;
+            
+            if (totalSeconds <= 0) {
+                resetTimer();
+                return;
+            }
+
+            isRunning = true;
+            controls.classList.add('dimmed');
+
+            interval = setInterval(() => {
+                if (totalSeconds > 0) {
+                    totalSeconds--;
+                    updateDisplay();
+                } else {
+                    timerEnd();
+                }
+            }, 1000);
+        }
+
+        function pauseTimer() {
+            if (!isRunning) return;
+            isRunning = false;
+            clearInterval(interval);
+            startBtn.textContent = "계속";
+            controls.classList.remove('dimmed');
+        }
+
+        function resetTimer() {
+            pauseTimer();
+            // 현재 설정된 최대 시간으로 리셋
+            totalSeconds = maxSeconds;
+            startBtn.textContent = "시작";
+            body.classList.remove('alarm-active');
+            display.style.color = '#fff';
+            progressBar.style.backgroundColor = '#fff';
+            updateDisplay();
+        }
+
+        // 사용자 지정 시간 설정 함수
+        function setCustomTime() {
+            const val = parseInt(customInput.value);
+            if (val && val > 0) {
+                targetMinutes = val;
+                maxSeconds = targetMinutes * 60;
+                resetTimer(); // 시간을 설정하면 바로 리셋되어 적용됨
+                
+                // 입력창 초기화 (선택사항, 사용자 편의를 위해 값 남겨둘지 결정)
+                // customInput.value = ''; 
+                // 버튼 텍스트 업데이트
+                document.getElementById('resetBtn').textContent = `${val}분 리셋`;
+            }
+        }
+
+        function timerEnd() {
+            pauseTimer();
+            totalSeconds = 0;
+            updateDisplay(); 
+            startBtn.textContent = "종료됨";
+            body.classList.add('alarm-active');
+        }
+
+        progressContainer.addEventListener('click', (e) => {
+            const rect = progressContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const width = rect.width;
+            let clickRatio = x / width;
+            clickRatio = Math.max(0, Math.min(1, clickRatio));
+            
+            // 현재 설정된 maxSeconds 기준으로 이동
+            totalSeconds = Math.round(clickRatio * maxSeconds);
+            updateDisplay();
+            
+            if (totalSeconds > 0 && body.classList.contains('alarm-active')) {
+                body.classList.remove('alarm-active');
+                if (!isRunning) startBtn.textContent = "계속";
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            // 입력창에 포커스가 있을 때는 스페이스바 동작 방지 (타이핑 중 멈춤 방지)
+            if (document.activeElement === customInput) return;
+
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (isRunning) pauseTimer();
+                else startTimer();
+            }
+            if (e.code === 'Escape') {
+                resetTimer();
+            }
+        });
+
+        // 리셋 버튼 텍스트 초기화
+        document.getElementById('resetBtn').textContent = `${targetMinutes}분 리셋`;
+
+        // 초기화
+        updateDisplay();
+    </script>
+</body>
+</html>
